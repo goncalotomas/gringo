@@ -9,39 +9,6 @@ import (
     "flag"
 )
 
-var ports = []int {
-    7,
-    21,
-    22,
-    23,
-    25,
-    53,
-    66,
-    69,
-    80,
-    88,
-    110,
-    123,
-    137,
-    139,
-    194,
-    118,
-    150,
-    443,
-    445,
-    554,
-    631,
-    1433,
-    1434,
-    3306,
-    3535,
-    5800,
-    8080,
-    9160,
-    27017,
-    28017,
-}
-
 var KnownTcpPorts = map[int]string{
     // Submit a pull request if you want to add more services!
     7:     "Echo",
