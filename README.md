@@ -3,6 +3,9 @@ The ~~dumbest~~ simplest Golang Port Scanner.
 
 ## What it does
 By default it searches for known TCP services, but it can be set to sweep the whole TCP port range with the `sweep` flag.
+### Wi-Fi Performance
+Regular mode: under 5 seconds  
+Sweep mode: usually around 90 seconds
 
 ## Usage
 ```bash
