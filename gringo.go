@@ -2,29 +2,20 @@ package main
 
 import (
     "fmt"
-    "runtime"
     "time"
     "net"
     "strconv"
     "sync"
+    "flag"
 )
 
-/*
- * A single threaded execution would take too much time, so I chose to use a worker pool.
- * I imagine that one can increase performance by using multiple go routines, but I don't
- * imagine performance increasing when numWorkers >> number of operating system threads.
- * Shout at me via twitter @goncaloptomas if you think I'm wrong.
- */
-var numWorkers = runtime.NumCPU()
-
-const DefaultTimeout = time.Duration(time.Second * 2)
-
-var Ports = []int {
+var ports = []int {
     7,
     21,
     22,
     23,
     25,
+    53,
     66,
     69,
     80,
@@ -36,6 +27,7 @@ var Ports = []int {
     194,
     118,
     150,
+    443,
     445,
     554,
     631,
@@ -51,11 +43,13 @@ var Ports = []int {
 }
 
 var KnownTcpPorts = map[int]string{
+    // Submit a pull request if you want to add more services!
     7:     "Echo",
   	21:    "FTP",
   	22:    "SSH",
   	23:    "telnet",
   	25:    "SMTP",
+    53:     "DNS",
   	66:    "Oracle SQL*NET?",
   	69:    "tftp",
     80:    "HTTP",
@@ -67,6 +61,7 @@ var KnownTcpPorts = map[int]string{
   	194:   "IRC",
   	118:   "SQL service?",
   	150:   "SQL-net?",
+    443:   "HTTP w/TLS",
     445:   "Samba",
     554:   "RTSP",
     631:   "CUPS",
@@ -81,24 +76,62 @@ var KnownTcpPorts = map[int]string{
   	28017: "mongodb web admin [ http://www.mongodb.org/ ]",
 }
 
+const DefaultTimeoutSecs = 5
+const MaxTcpPort = 65535
+const MaxOpenFileDescriptors = 768
+
 func main() {
-    fmt.Println("Going to scan target for some services I know mm'Kay? Hold on to your hat.")
+    start := time.Now()
 
-    // we are going to use several numWorkers (set to 1 to measure single threaded performance)
+    // read and parse command line flags
+    targetPtr := flag.String("target", "google.com", "target host")
+    timeoutSecsPtr := flag.Int("timeout", DefaultTimeoutSecs, "timeout value in seconds")
+    sweepPtr := flag.Bool("sweep", false, "sweep through all tcp ports")
+    flag.Parse()
+
+    timeoutDuration := time.Duration(time.Second * time.Duration(*timeoutSecsPtr))
+
+    // numRoutines and ports will depend on the value of *sweepPtr
+    var numRoutines int
+    var ports []int
+
+    if *sweepPtr {
+        fmt.Println("Sweep mode active. Set port range to 1-65535.")
+        numRoutines = MaxOpenFileDescriptors
+        ports = make([]int,MaxTcpPort)
+        for i := 0; i < MaxTcpPort; i++ {
+            ports[i] = i+1
+        }
+    } else {
+        // get ports as slice from our map[int]string
+        ports = make([]int,len(KnownTcpPorts))
+        curr := 0
+        for k,_ := range KnownTcpPorts {
+          ports[curr] = k
+          curr++
+        }
+
+        // Since the number of known services is much less than MaxOpenFileDescriptors, we can
+        // safely allocate this amount of goroutines, making non-sweep runs fast.
+        numRoutines = len(ports)
+    }
+
+    fmt.Println("Given current execution mode I'm going to use",numRoutines,"goroutines.")
+
+    // set waiting group to wait for all goroutines before finishing
     var wg sync.WaitGroup
-    wg.Add(numWorkers)
+    wg.Add(numRoutines)
 
-    // define the number of ports that each worker has to scan
-    portsPerRoutine := len(Ports)/numWorkers
+    // define the number of ports that each goroutine has to scan
+    portsPerRoutine := len(ports)/numRoutines
 
+    // the first goroutine will do some extra work if len(Ports)%numRoutines > 0
     currStart := 0
-    // the first worker will do some extra work if len(Ports)%numWorkers > 0
-    // I'm sure there are other ways to do this but I thought it was a good idea.
-    currEnd := portsPerRoutine + len(Ports)%numWorkers
+    currEnd := portsPerRoutine + len(ports)%numRoutines
 
-    for currentWorker := 0; currentWorker < numWorkers; currentWorker++ {
-        // start new go routine, pass it everything it needs, including the correct slice of ports
-        go scanMultipleTcpPorts(&wg,"goncalotomas.com",Ports[currStart:currEnd],DefaultTimeout)
+    for currRoutine := 0; currRoutine < numRoutines; currRoutine++ {
+        // start new goroutine, pass it everything it needs, including the correct slice of ports
+        go scanMultipleTcpPorts(&wg,*targetPtr,ports[currStart:currEnd],timeoutDuration)
         // increment both indexes
         currStart = currEnd
         currEnd += portsPerRoutine
@@ -106,23 +139,26 @@ func main() {
 
     // every worker needs to call wg.Done in order for .Wait to work
     wg.Wait()
-    fmt.Println("Finished!")
 
+    // finally, print the elapsed time since start
+    elapsed := time.Since(start)
+    fmt.Println("Finished! Time elapsed:",elapsed)
 }
 
 func scanMultipleTcpPorts(wg *sync.WaitGroup, ipAddr string, portRange []int, timeout time.Duration) {
-    defer wg.Done() // can't forget that...
+    defer wg.Done()
 
     for _,port := range portRange {
-
+      // scan individual TCP port
       isOpen := scanTcpPort(ipAddr,port,timeout)
 
+      // get service name from map
       serviceName := KnownTcpPorts[port]
 
       if isOpen && serviceName != "" {
           fmt.Println("Target is likely running",KnownTcpPorts[port],"on port",port)
       } else if isOpen && serviceName == ""{
-          fmt.Println("Port",port,"is open, no match for known services")
+          fmt.Println("Port",port,"is open, but no match for known services")
       }
 
     }
@@ -132,11 +168,11 @@ func scanMultipleTcpPorts(wg *sync.WaitGroup, ipAddr string, portRange []int, ti
 func scanTcpPort(ipAddr string, port int, timeout time.Duration) bool {
     // Concat the host and port so that we can use the net package
     addr := ipAddr + ":" + strconv.Itoa(port)
+
     // Try to resolve TCP address and bounce out if something goes wrong
     tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 
     if err != nil {
-        fmt.Println(err)
   		  return false
   	}
 
