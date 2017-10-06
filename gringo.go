@@ -37,6 +37,7 @@ var KnownTcpPorts = map[int]string{
 	3306:  "MySQL/MariaDB ",
 	3535:  "SMTP (alternate)",
 	5800:  "VNC remote desktop",
+	6000:  "lixo",
 	8080:  "HTTP",
 	9160:  "Cassandra [ http://cassandra.apache.org/ ]",
 	27017: "mongodb [ http://www.mongodb.org/ ]",
