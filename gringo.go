@@ -44,9 +44,11 @@ var KnownTcpPorts = map[int]string{
 	28017: "mongodb web admin [ http://www.mongodb.org/ ]",
 }
 
-const DefaultTimeoutSecs = 5
-const MaxTcpPort = 65535
-const MaxOpenFileDescriptors = 768
+const (
+	DefaultTimeoutSecs     = 5
+	MaxTcpPort             = 65535
+	MaxOpenFileDescriptors = 768
+)
 
 func main() {
 	start := time.Now()
@@ -67,14 +69,14 @@ func main() {
 		fmt.Println("Sweep mode active. Set port range to 1-65535.")
 		numRoutines = MaxOpenFileDescriptors
 		ports = make([]int, MaxTcpPort)
-		for i := 0; i < MaxTcpPort; i++ {
+		for i := range MaxTcpPort {
 			ports[i] = i + 1
 		}
 	} else {
 		// get ports as slice from our map[int]string
 		ports = make([]int, len(KnownTcpPorts))
 		curr := 0
-		for k, _ := range KnownTcpPorts {
+		for k := range KnownTcpPorts {
 			ports[curr] = k
 			curr++
 		}
@@ -130,7 +132,6 @@ func scanMultipleTcpPorts(wg *sync.WaitGroup, ipAddr string, portRange []int, ti
 		}
 
 	}
-
 }
 
 func scanTcpPort(ipAddr string, port int, timeout time.Duration) bool {
@@ -139,7 +140,6 @@ func scanTcpPort(ipAddr string, port int, timeout time.Duration) bool {
 
 	// Try to resolve TCP address and bounce out if something goes wrong
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-
 	if err != nil {
 		return false
 	}
@@ -147,7 +147,6 @@ func scanTcpPort(ipAddr string, port int, timeout time.Duration) bool {
 	// Tries to open a TCP connection to the TCP address, with a specific timeout value.
 	// Bounce out if something goes wrong.
 	conn, err := net.DialTimeout("tcp", tcpAddr.String(), timeout)
-
 	if err != nil {
 		return false
 	}
