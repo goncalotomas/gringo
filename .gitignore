@@ -1,3 +1,7 @@
+# ignore binary and target used for sbom generation
+/gringo
+/target
+
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
